@@ -1,4 +1,6 @@
 import torch
+from torch.autograd import Variable
+
 import math
 
 
@@ -11,8 +13,8 @@ class DiagonalMVN(object):
     self.log_stddev = log_stddev
 
   def sample(self):
-    # return self.mean + torch.exp(self.log_stddev) * torch.randn(self.mean.size())
-    return torch.normal(self.mean, torch.exp(self.log_stddev))
+    return self.mean + torch.exp(self.log_stddev) * Variable(torch.randn(self.mean.size()))
+    # return torch.normal(self.mean, torch.exp(self.log_stddev))
 
   def logprob(self, x):
     return -0.5 * (

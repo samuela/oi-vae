@@ -11,8 +11,9 @@ torch.manual_seed(0)
 
 image_size = 4
 num_samples = 1024
-num_epochs = 128
+num_epochs = 1000000
 mc_samples = 1
+batch_size = 64
 
 X = torch.stack([
   sample_bars(
@@ -64,58 +65,60 @@ z_prior = DiagonalMVN(
   Variable(torch.zeros(2 * image_size))
 )
 
+lr = 1e0 / 4
 optimizer = torch.optim.SGD([
-  {'params': inference_net.parameters(), 'lr': 1e-4, 'momentum': 0.9},
-  {'params': generative_net.parameters(), 'lr': 1e-4, 'momentum': 0.9}
+  {'params': inference_net.parameters(), 'lr': lr, 'momentum': 0.9},
+  {'params': generative_net.parameters(), 'lr': lr, 'momentum': 0.9}
 ])
 
 def debug(count):
-  plt.figure(figsize=(12, 4))
+  fig, ax = plt.subplots(2, count, figsize=(12, 4))
 
   # True images
   for i in range(count):
-    plt.subplot(2, count, i + 1)
-    plt.imshow(X[i].view(image_size, image_size).numpy())
-    plt.axis('off')
+    ax[0, i].imshow(X[i].view(image_size, image_size).numpy())
+    ax[0, i].axes.xaxis.set_ticks([])
+    ax[0, i].axes.yaxis.set_ticks([])
 
   # Reconstructed images
   for i in range(count):
     Xvar = Variable(X[i])
     fX = generative_net(inference_net(Xvar).mean).mean.view(image_size, image_size)
-    plt.subplot(2, count, count + i + 1)
-    plt.imshow(fX.data.numpy())
-    # plt.imshow(fX[i].numpy())
-    plt.axis('off')
+    ax[1, i].imshow(fX.data.numpy())
+    ax[1, i].axes.xaxis.set_ticks([])
+    ax[1, i].axes.yaxis.set_ticks([])
 
-  plt.subplot(2, count, 1)
-  plt.ylabel('true image')
+  ax[0, 0].set_ylabel('true image')
+  ax[1, 0].set_ylabel('reconstructed')
 
-  plt.subplot(2, count, count + 1)
-  plt.ylabel('reconstructed')
-
-  plt.show()
+  return fig
 
 plot_interval = 1000
 
 for i in range(num_epochs):
   loss = 0
-  for j in range(num_samples):
+  for j in torch.randperm(num_samples)[:batch_size]:
     Xvar = Variable(X[j])
     vi_posterior = inference_net(Xvar)
     likelihood_term = sum(
       generative_net(vi_posterior.sample()).logprob(Xvar)
+      # generative_net(vi_posterior.mean).logprob(Xvar)
       for _ in range(mc_samples)
     )
     kl = KL_DiagonalMVNs(vi_posterior, z_prior)
     elbo = -kl + likelihood_term / mc_samples
     loss -= elbo
 
+  loss /= batch_size
+
   if i % plot_interval == 0:
     debug(8)
+    plt.suptitle('Iteration {}'.format(i))
+    plt.show()
 
   optimizer.zero_grad()
   loss.backward()
   optimizer.step()
 
   print('epoch', i, 'cumulative ELBO:', -loss.data[0])
-  # print(-kl, likelihood_term / mc_samples)
+  # print(-kl.data[0], likelihood_term.data[0] / mc_samples)
