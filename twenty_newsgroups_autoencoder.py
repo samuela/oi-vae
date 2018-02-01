@@ -11,7 +11,7 @@ from sklearn.svm import LinearSVC
 from sklearn.feature_selection import SelectFromModel
 # from sklearn.feature_extraction.text import TfidfVectorizer
 
-from common import FirstLayerSparseDecoder
+from lib.common import FirstLayerSparseDecoder
 
 
 print('Loading 20 newsgroups...')
