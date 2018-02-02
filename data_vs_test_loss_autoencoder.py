@@ -1,10 +1,14 @@
+"""An evaluation of the test loss as a function of training data size for
+different levels of the regularization parameter lambda. This is on the bars
+dataset with a standard autoencoder model."""
+
+import matplotlib.pyplot as plt
+
 import torch
 from torch.autograd import Variable
 
-from bars_data import sample_bars, sample_bars_one
-from common import FirstLayerSparseDecoder
-
-import matplotlib.pyplot as plt
+from lib.bars_data import sample_bars_image, sample_one_bar_image
+from lib.models import FirstLayerSparseDecoder
 
 
 torch.manual_seed(0)
@@ -46,7 +50,7 @@ def make_nonlinear_decoder():
 
 def sample_bars_data(n):
   return torch.stack([
-    sample_bars(
+    sample_bars_image(
       torch.ones(image_size) / image_size * 2,
       torch.ones(image_size) / image_size * 0
     ).view(-1)
@@ -55,13 +59,13 @@ def sample_bars_data(n):
 
 def sample_single_bars_data(n):
   return torch.stack([
-    sample_bars_one(image_size).view(-1)
+    sample_one_bar_image(image_size).view(-1)
     for _ in range(n)
   ])
 
 def sample_tied_bars_data(n, num_repeats):
   halfX = torch.stack([
-    sample_bars(
+    sample_bars_image(
       torch.ones(image_size // num_repeats) / image_size * 2,
       torch.ones(image_size) / image_size * 0
     ).view(-1)
@@ -140,17 +144,31 @@ def run():
 
   return results
 
-res = run()
+def run_and_save(filename):
+  res = run()
+  obj = {
+    'results': res,
+    'nums_train_samples': nums_train_samples,
+    'lams': lams
+  }
 
-import pickle
-pickle.dump(res, open('poop.p', 'wb'))
+  import pickle
+  pickle.dump(obj, open(filename, 'wb'))
 
-plt.figure()
-for j in range(len(lams)):
-  test_losses = [res[(i, j)][0][-1] for i in range(len(nums_train_samples))]
-  # plt.plot(nums_train_samples, test_losses)
-  plt.semilogx(nums_train_samples, test_losses, basex=2, marker='o')
-plt.xlabel('num. training samples')
-plt.ylabel('test reconstruction loss')
-plt.legend(['lambda = {}'.format(lam) for lam in lams])
-plt.show()
+  return obj
+
+def plot(obj, epoch):
+  # unpack
+  _res = obj['results']
+  _nums_train_samples = obj['nums_train_samples']
+  _lams = obj['lams']
+
+  for j in range(len(_lams)):
+    test_losses = [_res[(i, j)][0][epoch] for i in range(len(_nums_train_samples))]
+    # plt.plot(_nums_train_samples, test_losses)
+    plt.semilogx(_nums_train_samples, test_losses, basex=2, marker='o')
+  plt.xlabel('num. training samples')
+  plt.ylabel('test reconstruction loss')
+  plt.legend(['lambda = {}'.format(lam) for lam in _lams])
+  plt.title('epoch = {}'.format(epoch))
+  plt.show()

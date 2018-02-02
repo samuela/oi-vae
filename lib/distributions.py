@@ -57,7 +57,7 @@ class Gamma(object):
       - self.rate * x
     )
 
-class _JointDistribution(object):
+class _DistributionCat(object):
   def __init__(self, distributions, dim=-1):
     self.distributions = distributions
     self.dim = dim
@@ -72,11 +72,11 @@ class _JointDistribution(object):
   def entropy(self):
     return sum(d.entropy() for d in self.distributions)
 
-def JointDistribution(distributions, dim=-1):
+def DistributionCat(distributions, dim=-1):
   if all(isinstance(d, Normal) for d in distributions):
     return Normal(
       mu=torch.cat([d.mu for d in distributions], dim=dim),
       sigma=torch.cat([d.sigma for d in distributions], dim=dim)
     )
   else:
-    return _JointDistribution(distributions, dim=-1)
+    return _DistributionCat(distributions, dim=-1)

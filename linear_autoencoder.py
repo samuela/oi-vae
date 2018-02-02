@@ -1,9 +1,11 @@
+"""This is a very simple linear autoencoder model running on the bars data."""
+
+import matplotlib.pyplot as plt
+
 import torch
 from torch.autograd import Variable
 
-from bars_data import sample_bars
-
-import matplotlib.pyplot as plt
+from lib.bars_data import sample_bars
 
 
 torch.manual_seed(0)

@@ -1,12 +1,12 @@
 """Weird Edward behavior here. Things go to NaN even when learning rate = 0."""
 
 import edward as ed
-import tensorflow as tf
-
 from edward.models import Normal, Gamma
 
+import tensorflow as tf
+
 import torch
-from bars_data import sample_bars
+from lib.bars_data import sample_bars
 
 
 ed.set_seed(0)
@@ -122,7 +122,7 @@ inference.initialize(n_samples=1, optimizer=optimizer, auto_transform=True)
 
 tf.global_variables_initializer().run()
 
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 
 # def debug(data, ixs):
 #   fig, ax = plt.subplots(3, len(ixs), figsize=(12, 4))

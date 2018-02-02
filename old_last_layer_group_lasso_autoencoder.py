@@ -1,12 +1,12 @@
 import itertools
 import math
 
+import matplotlib.pyplot as plt
+
 import torch
 from torch.autograd import Variable
 
-from bars_data import sample_bars, sample_bars_one
-
-import matplotlib.pyplot as plt
+from lib.bars_data import sample_bars, sample_bars_one
 
 
 torch.manual_seed(0)

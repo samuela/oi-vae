@@ -1,10 +1,13 @@
+"""A standard autoencoder model with the group lasso sparsity penalty and
+proximal gradient descent. Runs on bars data."""
+
+import matplotlib.pyplot as plt
+
 import torch
 from torch.autograd import Variable
 
-from bars_data import sample_bars, sample_bars_one
-from common import FirstLayerSparseDecoder
-
-import matplotlib.pyplot as plt
+from lib.bars_data import sample_bars, sample_bars_one
+from lib.common import FirstLayerSparseDecoder
 
 
 torch.manual_seed(0)
@@ -167,7 +170,7 @@ def debug(data, ixs):
     Xvar = Variable(data[ix])
     fX = decoder(encoder(Xvar)).view(image_size, image_size)
     ax[2, i].imshow(fX.data.numpy(), vmin=0, vmax=1)
-    loss = torch.sum(torch.pow(fX - Xvar.view(image_size, image_size), 2))
+    # loss = torch.sum(torch.pow(fX - Xvar.view(image_size, image_size), 2))
     # ax[2, i].set_title('{:6.4f}'.format(loss.data[0]))
     ax[2, i].axes.xaxis.set_ticks([])
     ax[2, i].axes.yaxis.set_ticks([])
@@ -190,33 +193,33 @@ def debug2():
 
   plt.colorbar()
 
-def debug_sampler_vs_learned_weights(sampler):
-  plt.figure(figsize=(12, 4))
+# def debug_sampler_vs_learned_weights(sampler):
+#   plt.figure(figsize=(12, 4))
 
-  # See https://matplotlib.org/examples/color/colormaps_reference.html
-  cmap = 'bwr'
-  for j, m in enumerate(sampler.latent_to_group_maps):
-    plt.subplot(2, image_size, j + 1)
-    plt.imshow(torch.stack([m.weight.data for _ in range(image_size)]).squeeze(), vmin=-0.5, vmax=0.5, cmap=cmap)
-    plt.title('group {}'.format(j))
-    # plt.xlabel('z_i')
-    plt.gca().xaxis.set_ticks(range(image_size))
-    plt.gca().yaxis.set_ticks([])
+#   # See https://matplotlib.org/examples/color/colormaps_reference.html
+#   cmap = 'bwr'
+#   for j, m in enumerate(sampler.latent_to_group_maps):
+#     plt.subplot(2, image_size, j + 1)
+#     plt.imshow(torch.stack([m.weight.data for _ in range(image_size)]).squeeze(), vmin=-0.5, vmax=0.5, cmap=cmap)
+#     plt.title('group {}'.format(j))
+#     # plt.xlabel('z_i')
+#     plt.gca().xaxis.set_ticks(range(image_size))
+#     plt.gca().yaxis.set_ticks([])
 
-  for j, m in enumerate(decoder.latent_to_group_maps):
-    plt.subplot(2, image_size, j + 1 + image_size)
-    plt.imshow(torch.stack([m.weight.data for _ in range(image_size)]).squeeze(), vmin=-0.5, vmax=0.5, cmap=cmap)
-    # plt.title('group {}'.format(j))
-    plt.xlabel('z_i')
-    plt.gca().xaxis.set_ticks(range(image_size))
-    plt.gca().yaxis.set_ticks([])
+#   for j, m in enumerate(decoder.latent_to_group_maps):
+#     plt.subplot(2, image_size, j + 1 + image_size)
+#     plt.imshow(torch.stack([m.weight.data for _ in range(image_size)]).squeeze(), vmin=-0.5, vmax=0.5, cmap=cmap)
+#     # plt.title('group {}'.format(j))
+#     plt.xlabel('z_i')
+#     plt.gca().xaxis.set_ticks(range(image_size))
+#     plt.gca().yaxis.set_ticks([])
 
-  plt.subplot(2, image_size, 1)
-  plt.ylabel('true weights')
-  plt.subplot(2, image_size, image_size + 1)
-  plt.ylabel('learned weights')
+#   plt.subplot(2, image_size, 1)
+#   plt.ylabel('true weights')
+#   plt.subplot(2, image_size, image_size + 1)
+#   plt.ylabel('learned weights')
 
-  plt.suptitle('first layer weights, iter = {}, lambda = {}, lr = {}, momentum = {}\nNote that the z components may be permuted between the true and learned models.'.format(i, lam, lr, momentum))
+#   plt.suptitle('first layer weights, iter = {}, lambda = {}, lr = {}, momentum = {}\nNote that the z components may be permuted between the true and learned models.'.format(i, lam, lr, momentum))
 
 def debug_incoming_weights():
   fig, ax = plt.subplots(1, image_size, figsize=(12, 4))
@@ -266,7 +269,7 @@ def reconstruction_loss(data):
   residual = reconstructed - Xvar
   return torch.sum(torch.pow(residual, 2)) / Xvar.size(0)
 
-for i in range(num_epochs):
+for epoch in range(num_epochs):
   train_loss = reconstruction_loss(Xtrain)
   sparsity_penalty = lam * decoder.group_lasso_penalty()
 
@@ -274,7 +277,7 @@ for i in range(num_epochs):
   train_loss.backward()
   optimizer.step()
   decoder.proximal_step(lr * lam)
-  print('epoch', i)
+  print('epoch', epoch)
   print('  reconstruction loss:', train_loss.data[0])
   print('  regularization:     ', sparsity_penalty.data[0])
   print('  combined loss:      ', (train_loss + sparsity_penalty).data[0])
@@ -282,7 +285,7 @@ for i in range(num_epochs):
   test_loss = reconstruction_loss(Xtest)
   print('  test reconstruction loss:', test_loss.data[0])
 
-  if i % plot_interval == 0 and i > 0:
+  if epoch % plot_interval == 0 and epoch > 0:
     test_loss = reconstruction_loss(Xtest)
     print('  test reconstruction loss:', test_loss.data[0])
     # print('### decoder.latent_to_group_maps parameters')
@@ -292,7 +295,7 @@ for i in range(num_epochs):
     # debug([0, 1, 4, 7, 8, 9, 12, 25])
     debug(Xtrain, [0, 1, 2, 3, 4, 5, 6, 7])
     # plt.suptitle('Iteration {}, lambda = {}, lr = {}, momentum = {}'.format(i, lam, lr, momentum))
-    plt.suptitle('Iteration {}, lambda = {}, lr = {}'.format(i, lam, lr))
+    plt.suptitle('Iteration {}, lambda = {}, lr = {}'.format(epoch, lam, lr))
 
     # debug2()
 

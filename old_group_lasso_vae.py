@@ -3,9 +3,9 @@ import itertools
 import torch
 from torch.autograd import Variable
 
-from bars_data import sample_bars
-from common import KL_DiagonalMVNs, LearnedTiedVarianceNet, FirstLayerSparseDecoder
-from distributions import DiagonalMVN
+from lib.bars_data import sample_bars
+from lib.common import LearnedTiedVarianceNet, FirstLayerSparseDecoder
+# from lib.distributions import DiagonalMVN
 
 import matplotlib.pyplot as plt
 
