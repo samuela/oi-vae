@@ -13,7 +13,7 @@ from lib.bars_data import (sample_bars_image, sample_many_bars_images,
 from lib.distributions import Normal
 from lib.models import BayesianGroupLassoGenerator, NormalNet
 from lib.proximal_vae import NormalPriorTheta, ProximalVAE
-from lib.utils import KL_Normals, Lambda
+from lib.utils import Lambda
 
 torch.manual_seed(0)
 
