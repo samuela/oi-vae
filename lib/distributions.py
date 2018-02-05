@@ -43,6 +43,18 @@ class Normal(object):
       -0.5 * torch.pow((x - self.mu) / self.sigma, 2)
     )
 
+  def expand(self, *args, **kwargs):
+    return Normal(
+      self.mu.expand(*args, **kwargs),
+      self.sigma.expand(*args, **kwargs)
+    )
+
+  def expand_as(self, *args, **kwargs):
+    return Normal(
+      self.mu.expand_as(*args, **kwargs),
+      self.sigma.expand_as(*args, **kwargs)
+    )
+
 class Gamma(object):
   def __init__(self, shape, rate):
     assert shape.size() == rate.size()
@@ -80,3 +92,5 @@ def DistributionCat(distributions, dim=-1):
     )
   else:
     return _DistributionCat(distributions, dim=-1)
+
+# TODO DistributionExpand

@@ -22,7 +22,7 @@ class NormalPriorTheta(object):
       for param in gen.parameters()
     )
 
-class ProximalVAE(object):
+class OIVAE(object):
   def __init__(
       self,
       inference_model,
@@ -47,7 +47,7 @@ class ProximalVAE(object):
 
     # KL divergence is additive across independent joint distributions, so this
     # works appropriately.
-    z_kl = KL_Normals(q_z, self.prior_z) / batch_size
+    z_kl = KL_Normals(q_z, self.prior_z.expand_as(q_z)) / batch_size
 
     # [batch_size * mc_samples, dim_z]
     z_sample = torch.cat([q_z.sample() for _ in range(mc_samples)], dim=0)

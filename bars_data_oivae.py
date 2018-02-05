@@ -12,7 +12,7 @@ from lib.bars_data import (sample_bars_image, sample_many_bars_images,
                            sample_one_bar_image)
 from lib.distributions import Normal
 from lib.models import BayesianGroupLassoGenerator, NormalNet
-from lib.proximal_vae import NormalPriorTheta, ProximalVAE
+from lib.oivae import NormalPriorTheta, OIVAE
 from lib.utils import Lambda
 
 torch.manual_seed(0)
@@ -24,11 +24,11 @@ num_groups = image_size
 group_input_dim = 1
 
 prior_theta_scale = 1
-lam = 1
+lam = 0
 lam_adjustment = 1
 
 num_train_samples = 2048
-num_epochs = 1000000000
+num_epochs = 20000
 mc_samples = 1
 batch_size = 64
 
@@ -197,6 +197,18 @@ def debug_outgoing_weights():
 
   return fig
 
+def debug_z_by_group_matrix():
+  fig, ax = plt.subplots()
+  W_col_norms = torch.sqrt(
+    torch.sum(torch.pow(generative_net.Ws.data, 2), dim=2)
+  )
+  ax.imshow(W_col_norms, aspect='equal')
+  ax.set_xlabel('dimensions of z')
+  ax.set_ylabel('group generative nets')
+  ax.xaxis.tick_top()
+  ax.xaxis.set_label_position('top')
+  # plt.title('Connectivity between dimensions of z and group generator networks')
+
 prior_z = Normal(
   Variable(torch.zeros(batch_size, dim_z)),
   Variable(torch.ones(batch_size, dim_z))
@@ -231,7 +243,7 @@ optimizer_Ws = torch.optim.SGD([
   {'params': [generative_net.Ws], 'lr': Ws_lr, 'momentum': 0}
 ])
 
-vae = ProximalVAE(
+vae = OIVAE(
   inference_model=inference_net,
   generative_model=generative_net,
   prior_z=prior_z,
@@ -240,7 +252,7 @@ vae = ProximalVAE(
   optimizers=[optimizer, optimizer_Ws]
 )
 
-plot_interval = 5000
+plot_interval = 100000
 elbo_per_iter = []
 for i in range(num_epochs):
   if i > 1000:
@@ -258,13 +270,15 @@ for i in range(num_epochs):
 
   if i % plot_interval == 0 and i > 0:
     debug(8)
-    plt.suptitle('Bayesian Group Lasso VAE, Iteration {}, lr = {}, lam = {}, batch_size = {}, num_train_samples = {}'.format(i, lr, lam, batch_size, num_train_samples))
+    plt.suptitle('OI-VAE, Iteration {}, lr = {}, lam = {}, batch_size = {}, num_train_samples = {}'.format(i, lr, lam, batch_size, num_train_samples))
 
     debug_incoming_weights()
     plt.suptitle('incoming z weights')
 
     debug_outgoing_weights()
     plt.suptitle('outgoing z weight norms')
+
+    debug_z_by_group_matrix()
 
     plt.figure()
     plt.plot(elbo_per_iter)
@@ -282,3 +296,7 @@ for i in range(num_epochs):
   print('    loglik_term      ', info['loglik_term'].data[0])
   print('    log p(theta)     ', info['logprob_theta'].data[0])
   print('    log p(W)         ', info['logprob_W'].data[0])
+
+# Plot the final connectivity matrix and save
+debug_z_by_group_matrix()
+plt.savefig('bars_data_connectivity_matrix.pdf', format='pdf')
