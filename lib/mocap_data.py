@@ -86,7 +86,7 @@ def amc_to_array(parsed_amc, joint_order):
 
   return joint_dims, arr
 
-def load_mocap_trial(subject, trial, datadir=DATADIR):
+def load_mocap_trial(subject, trial, joint_order=None, datadir=DATADIR):
   """Complete pipeline for loading subject/trial data into an array. The root
   joint is guaranteed to be the first in line for easier downstream processing.
 
@@ -100,8 +100,10 @@ def load_mocap_trial(subject, trial, datadir=DATADIR):
   raw_contents = open(path, 'r').read()
   parsed = parse_amc_data(raw_contents)
 
-  # Make sure to put root in front because we want to remove the first three
-  # translation channels.
-  joint_order = ['root'] + [k for k in parsed[0][1].keys() if k != 'root']
+  if joint_order == None:
+    # Make sure to put root in front because we want to remove the first three
+    # translation channels.
+    joint_order = ['root'] + [k for k in parsed[0][1].keys() if k != 'root']
+
   joint_dims, arr = amc_to_array(parsed, joint_order)
   return joint_order, joint_dims, arr

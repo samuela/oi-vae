@@ -24,7 +24,7 @@ num_groups = image_size
 group_input_dim = 1
 
 prior_theta_scale = 1
-lam = 0
+lam = 1
 lam_adjustment = 1
 
 num_train_samples = 2048
@@ -300,3 +300,17 @@ for i in range(num_epochs):
 # Plot the final connectivity matrix and save
 debug_z_by_group_matrix()
 plt.savefig('bars_data_connectivity_matrix.pdf', format='pdf')
+
+def save_img_and_reconstruction(ix):
+  plt.figure()
+  plt.imshow(X[ix].view(image_size, image_size).numpy())
+  plt.savefig('{}_true.pdf'.format(ix), format='pdf')
+
+  plt.figure()
+  Xvar = Variable(X[[i]])
+  fX = generative_net(inference_net(Xvar).sample()).sample().view(image_size, image_size)
+  plt.imshow(fX.data.squeeze().numpy())
+  plt.savefig('{}_reconstruction_full_sample.pdf'.format(ix), format='pdf')
+
+for i in range(16):
+  save_img_and_reconstruction(i)

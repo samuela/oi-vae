@@ -23,19 +23,85 @@ from lib.utils import Lambda
 
 torch.manual_seed(0)
 
-dim_z = 16
-group_input_dim = 4
+dim_z = 8
+group_input_dim = 8
 
 prior_theta_scale = 1
 lam = 1
 lam_adjustment = 1
 
-num_epochs = 1000000000
-mc_samples = 1
+num_epochs = 500000
+mc_samples = 10
 batch_size = 64
 
+"""lam = 1 after ~500 epochs looks good."""
+
+# Group the joints
+# groups = [
+#   ['root'],
+#   ['lowerback', 'upperback', 'thorax'],
+#   ['lowerneck', 'upperneck', 'head'],
+#   ['rclavicle', 'rhumerus', 'rradius'],
+#   ['rwrist', 'rhand', 'rfingers', 'rthumb'],
+#   ['lclavicle', 'lhumerus', 'lradius'],
+#   ['lwrist', 'lhand', 'lfingers', 'lthumb'],
+#   ['rfemur', 'rtibia'],
+#   ['rfoot', 'rtoes'],
+#   ['lfemur', 'ltibia'],
+#   ['lfoot', 'ltoes']
+# ]
+# group_names = [
+#   'root',
+#   'back',
+#   'neck+head',
+#   'right arm',
+#   'right wrist+hand',
+#   'left arm',
+#   'left wrist+hand',
+#   'right leg',
+#   'right foot+toes',
+#   'left leg',
+#   'left foot+toes'
+# ]
+
+# Each joint is a separate group
+groups = [
+  ['root'],
+  ['lowerback'],
+  ['upperback'],
+  ['thorax'],
+  ['lowerneck'],
+  ['upperneck'],
+  ['head'],
+  ['rclavicle'],
+  ['rhumerus'],
+  ['rradius'],
+  ['rwrist'],
+  ['rhand'],
+  ['rfingers'],
+  ['rthumb'],
+  ['lclavicle'],
+  ['lhumerus'],
+  ['lradius'],
+  ['lwrist'],
+  ['lhand'],
+  ['lfingers'],
+  ['lthumb'],
+  ['rfemur'],
+  ['rtibia'],
+  ['rfoot'],
+  ['rtoes'],
+  ['lfemur'],
+  ['ltibia'],
+  ['lfoot'],
+  ['ltoes']
+]
+group_names = [g[0] for g in groups]
+
+joint_order = [joint for grp in groups for joint in grp]
+
 # These are some walking sequences from subject 7.
-trials = [
+train_trials = [
   (7, 1),
   (7, 2),
   (7, 3),
@@ -46,40 +112,51 @@ trials = [
   (7, 8),
   (7, 9),
   (7, 10),
+]
+test_trials = [
   (7, 11),
   (7, 12)
 ]
 
-trials_data = [
-  mocap_data.load_mocap_trial(subject, trial)
-  for subject, trial in trials
+train_trials_data = [
+  mocap_data.load_mocap_trial(subject, trial, joint_order=joint_order)
+  for subject, trial in train_trials
 ]
-joint_order, joint_dims, _ = trials_data[0]
+test_trials_data = [
+  mocap_data.load_mocap_trial(subject, trial, joint_order=joint_order)
+  for subject, trial in test_trials
+]
+_, joint_dims, _ = train_trials_data[0]
 
 # We remove the first three components since those correspond to root position
 # in 3d space.
 joint_dims['root'] = joint_dims['root'] - 3
-Xraw = torch.FloatTensor(
+Xtrain_raw = torch.FloatTensor(
   # Chain all of the different lists together across the trials
-  list(itertools.chain(*[arr for _, _, arr in trials_data]))
+  list(itertools.chain(*[arr for _, _, arr in train_trials_data]))
+)[:, 3:]
+Xtest_raw = torch.FloatTensor(
+  # Chain all of the different lists together across the trials
+  list(itertools.chain(*[arr for _, _, arr in test_trials_data]))
 )[:, 3:]
 
 # Normalize each of the channels to be within [0, 1].
-mins, _ = torch.min(Xraw, dim=0)
-maxs, _ = torch.max(Xraw, dim=0)
+mins, _ = torch.min(Xtrain_raw, dim=0)
+maxs, _ = torch.max(Xtrain_raw, dim=0)
 
 # Some of these things aren't used, and we don't want to divide by zero
-X = (Xraw - mins) / torch.clamp(maxs - mins, min=0.1)
+Xtrain = (Xtrain_raw - mins) / torch.clamp(maxs - mins, min=0.1)
 
 dataloader = torch.utils.data.DataLoader(
   # TensorDataset is stupid. We have to provide two tensors.
-  torch.utils.data.TensorDataset(X, torch.zeros(X.size(0))),
+  torch.utils.data.TensorDataset(Xtrain, torch.zeros(Xtrain.size(0))),
   batch_size=batch_size,
   shuffle=True
 )
 
-dim_x = X.size(1)
-num_groups = len(joint_order)
+dim_x = Xtrain.size(1)
+num_groups = len(groups)
+group_dims = [sum(joint_dims[j] for j in grp) for grp in groups]
 
 # This value adjusts the impact of our learned variances in the sigma_net of
 # `inference_net` below. Zero means that the model has no actual connection to
@@ -123,7 +200,11 @@ def make_group_generator(output_dim):
     requires_grad=True
   )
   return NormalNet(
-    mu_net=torch.nn.Linear(group_input_dim, output_dim),
+    mu_net=torch.nn.Sequential(
+      # torch.nn.Linear(group_input_dim, 16),
+      torch.nn.Tanh(),
+      torch.nn.Linear(group_input_dim, output_dim)
+    ),
     sigma_net=Lambda(
       lambda x, log_sigma: torch.exp(log_sigma.expand(x.size(0), -1)) + 1e-3,
       extra_args=(log_sigma,)
@@ -131,27 +212,39 @@ def make_group_generator(output_dim):
   )
 
 generative_net = BayesianGroupLassoGenerator(
-  group_generators=[
-    make_group_generator(joint_dims[joint])
-    for joint in joint_order
-  ],
+  group_generators=[make_group_generator(dim) for dim in group_dims],
   group_input_dim=group_input_dim,
   dim_z=dim_z
 )
 
 def debug_z_by_group_matrix():
+  # dim_z x groups
+  # fig, ax = plt.subplots()
+  # W_col_norms = torch.sqrt(
+  #   torch.sum(torch.pow(generative_net.Ws.data, 2), dim=2)
+  # )
+  # ax.imshow(W_col_norms.t().numpy(), aspect='equal')
+  # ax.set_ylabel('dimensions of z')
+  # ax.set_xlabel('group generative nets')
+  # ax.xaxis.tick_top()
+  # ax.xaxis.set_label_position('top')
+  # ax.xaxis.set_ticks(np.arange(len(joint_order)))
+  # ax.xaxis.set_ticklabels(joint_order, rotation='vertical')
+
+  # groups x dim_z
   fig, ax = plt.subplots()
   W_col_norms = torch.sqrt(
     torch.sum(torch.pow(generative_net.Ws.data, 2), dim=2)
   )
-  ax.imshow(W_col_norms.t().numpy(), aspect='equal')
-  ax.set_ylabel('dimensions of z')
-  ax.set_xlabel('group generative nets')
+  W_col_norms_prop = W_col_norms / torch.max(W_col_norms, dim=0)[0]
+  ax.imshow(W_col_norms_prop.numpy(), aspect='equal')
+  ax.set_xlabel('dimensions of z')
+  ax.set_ylabel('group generative nets')
   ax.xaxis.tick_top()
   ax.xaxis.set_label_position('top')
-  ax.xaxis.set_ticks(np.arange(len(joint_order)))
-  ax.xaxis.set_ticklabels(joint_order, rotation='vertical')
-  plt.show()
+  ax.yaxis.set_ticks(np.arange(len(groups)))
+  ax.yaxis.set_ticklabels(group_names)
+
   # plt.title('Connectivity between dimensions of z and group generator networks')
 
 # lr = 1e-3
@@ -197,12 +290,12 @@ vae = OIVAE(
   optimizers=[optimizer, optimizer_Ws]
 )
 
-plot_interval = 50000
+plot_interval = 5000
 elbo_per_iter = []
 iteration = 0
 for epoch in range(num_epochs):
   for Xbatch, _ in dataloader:
-    if iteration > 500:
+    if iteration > 1000:
       stddev_multiple = 1
 
     info = vae.step(
@@ -232,7 +325,30 @@ for epoch in range(num_epochs):
     iteration += 1
 
 print('Outputting reconstructions AMC file...')
-def poop():
-  reconstructed = generative_net(inference_net(Variable(X)).mu).mu
+def save_amc(filename, seq):
+  ordered_joint_dims = [joint_dims[joint] for joint in joint_order]
+  joint_ixs_start = np.cumsum([0] + ordered_joint_dims)
 
-poop()
+  with open(filename, 'w') as f:
+    # preamble
+    f.write('#!OML:ASF\n')
+    f.write(':FULLY-SPECIFIED\n')
+    f.write(':DEGREES\n')
+
+    for i in range(seq.size(0)):
+      # Keyframe number, starting at 1
+      f.write('{}\n'.format(i + 1))
+
+      for joint, dim, ix_start in zip(joint_order, ordered_joint_dims, joint_ixs_start):
+        f.write('{} '.format(joint))
+
+        # The root has three special channels for the XYZ translation that we do
+        # not learn.
+        if joint == 'root':
+          f.write('0 0 0 ')
+
+        f.write(' '.join([str(seq[i, ix_start + j]) for j in range(dim)]))
+        f.write('\n')
+
+reconstructed = generative_net(inference_net(Variable(X)).mu).mu.data * torch.clamp(maxs - mins, min=0.1) + mins
+save_amc('07_reconstructed.amc', reconstructed)
