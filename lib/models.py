@@ -22,8 +22,8 @@ class NormalNet(object):
     )
   
   def cuda(self):
-      self.mu_net.cuda()
-      self.sigma_net.cuda()
+    self.mu_net.cuda()
+    self.sigma_net.cuda()
 
 
 class FirstLayerSparseDecoder(object):
@@ -75,7 +75,7 @@ class BayesianGroupLassoGenerator(object):
   generator is assumed to output a distribution as opposed to a Tensor in the
   `FirstLayerSparseDecoder` model."""
 
-  def __init__(self, group_generators, group_input_dim, dim_z, use_cuda=False):
+  def __init__(self, group_generators, group_input_dim, dim_z):
     self.group_generators = group_generators
     self.group_input_dim = group_input_dim
     self.dim_z = dim_z
@@ -83,13 +83,10 @@ class BayesianGroupLassoGenerator(object):
 
     # Starting this off with reasonably large values is helpful so that proximal
     # gradient descent doesn't prematurely kill them.
-    Ws_tnsr = torch.randn(self.num_groups, self.dim_z, self.group_input_dim)
-    if use_cuda:
-      Ws_tnsr = Ws_tnsr.cuda()
-      for gen in self.group_generators:
-        gen.cuda()
-
-    self.Ws = Variable(Ws_tnsr, requires_grad=True)
+    self.Ws = Variable(
+      torch.randn(self.num_groups, self.dim_z, self.group_input_dim), 
+      requires_grad=True
+    )
 
   def __call__(self, z):
     return DistributionCat(
@@ -116,3 +113,7 @@ class BayesianGroupLassoGenerator(object):
   def group_lasso_penalty(self):
     return torch.sum(torch.sqrt(torch.sum(torch.pow(self.Ws, 2), dim=2)))
 
+  def cuda(self):
+    self.Ws = Variable(self.Ws.data.cuda(), requires_grad=True)
+    for gen in self.group_generators:
+      gen.cuda()

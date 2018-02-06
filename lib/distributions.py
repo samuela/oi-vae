@@ -25,17 +25,17 @@ LOG2PI = torch.log(torch.FloatTensor([2 * math.pi]))[0]
 #     )
 
 class Normal(object):
-  def __init__(self, mu, sigma, use_cuda=False):
+  def __init__(self, mu, sigma):
     assert mu.size() == sigma.size()
     self.mu = mu
     self.sigma = sigma
-    self.dtype = torch.cuda.FloatTensor if use_cuda else torch.FloatTensor
 
   def size(self, *args, **kwargs):
     return self.mu.size(*args, **kwargs)
 
   def sample(self):
-    return self.mu + self.sigma * Variable(torch.randn(self.mu.size()).type_as(self.mu.data))
+    eps = torch.randn(self.mu.size()).type_as(self.mu.data)
+    return self.mu + self.sigma * Variable(eps)
 
   def logprob(self, x):
     return torch.sum(
@@ -93,5 +93,3 @@ def DistributionCat(distributions, dim=-1):
     )
   else:
     return _DistributionCat(distributions, dim=-1)
-
-# TODO DistributionExpand

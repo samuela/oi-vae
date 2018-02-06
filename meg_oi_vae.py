@@ -1,4 +1,3 @@
-
 import pickle as pkl
 import mne
 import numpy as np
@@ -45,7 +44,7 @@ epochs, inv, labels_morphed = load_subject_data(subject_name, sps_dir,
                                                 cond=cond)
 # compute inverse solutions
 print("applying inverse operators")
-ep_inv = apply_inverse_epochs(epochs, inv, lambda2=1/9, method='MNE')
+ep_inv = apply_inverse_epochs(epochs, inv, lambda2=1.0 / 9, method='MNE')
 ep_inv_ndarray = np.array([np.ascontiguousarray(ep.data.T) for ep in ep_inv])
 
 # get vertex indices for each label
@@ -59,26 +58,25 @@ n_verts = n_lhverts + n_rhverts
 offsets = {'lh': 0, 'rh': n_lhverts}
 
 for li, lab in enumerate(labels):
+  if isinstance(lab, mne.Label):
+    comp_labs = [lab]
+  elif isinstance(lab, mne.BiHemiLabel):
+    comp_labs = [lab.lh, lab.rh]
 
-    if isinstance(lab, mne.Label):
-        comp_labs = [lab]
-    elif isinstance(lab, mne.BiHemiLabel):
-        comp_labs = [lab.lh, lab.rh]
+  for clab in comp_labs:
+    hemi = clab.hemi
+    hi = 0 if hemi == 'lh' else 1
 
-    for clab in comp_labs:
-        hemi = clab.hemi
-        hi = 0 if hemi == 'lh' else 1
+    lverts = clab.get_vertices_used(vertices=src[hi]['vertno'])
 
-        lverts = clab.get_vertices_used(vertices=src[hi]['vertno'])
-
-        # gets the indices in the source space vertex array, not the huge
-        # array.
-        # use `src[hi]['vertno'][lverts]` to get surface vertex indices to
-        # plot.
-        lverts = np.searchsorted(src[hi]['vertno'], lverts)
-        lverts += offsets[hemi]
-        vertidx.extend(lverts)
-        roiidx.extend(li*np.ones(lverts.size, dtype=np.int))
+    # gets the indices in the source space vertex array, not the huge
+    # array.
+    # use `src[hi]['vertno'][lverts]` to get surface vertex indices to
+    # plot.
+    lverts = np.searchsorted(src[hi]['vertno'], lverts)
+    lverts += offsets[hemi]
+    vertidx.extend(lverts)
+    roiidx.extend(li*np.ones(lverts.size, dtype=np.int))
 
 num_labels = len(labels)
 M = n_verts
@@ -121,20 +119,22 @@ dim_z = 10
 group_input_dim = 1
 
 prior_theta_scale = 1.
-lam = 0.
+lam = 1
 lam_adjustment = 1.
 
-num_epochs = 100
+num_epochs = 200
 mc_samples = 1
-batch_size = 1024
+batch_size = 4096
 
 ep_inv_tnsr = torch.from_numpy(ep_inv_stacked)
 
 dataloader = torch.utils.data.DataLoader(
-        torch.utils.data.TensorDataset(ep_inv_tnsr.cuda(),
-                                       torch.zeros(ep_inv_tnsr.size(0)).cuda()),
-        batch_size=batch_size,
-        shuffle=True
+  torch.utils.data.TensorDataset(
+    ep_inv_tnsr.cuda(),
+    torch.zeros(ep_inv_tnsr.size(0))
+  ),
+  batch_size=batch_size,
+  shuffle=True
 )
 
 # This value adjusts the impact of our learned variances in the sigma_net of
@@ -144,7 +144,6 @@ dataloader = torch.utils.data.DataLoader(
 # some number of iterations.
 stddev_multiple = 0.1
 
-print('making neural nets')
 inference_net = NormalNet(
   mu_net=torch.nn.Sequential(
     # inference_net_base,
@@ -168,10 +167,6 @@ inference_net = NormalNet(
   )
 )
 
-if use_cuda:
-    inference_net.cuda()
-
-
 def make_group_generator(group_output_dim):
   # Note that this Variable is NOT going to show up in `net.parameters()` and
   # therefore it is implicitly free from the ridge penalty/p(theta) prior.
@@ -190,18 +185,21 @@ def make_group_generator(group_output_dim):
 generative_net = BayesianGroupLassoGenerator(
   group_generators=[make_group_generator(gs) for gs in group_output_dims],
   group_input_dim=group_input_dim,
-  dim_z=dim_z, use_cuda=use_cuda
+  dim_z=dim_z
 )
 
-mu = torch.zeros(1, dim_z)
-sigma = torch.ones(1, dim_z)
+prior_z = Normal(
+  Variable(torch.zeros(1, dim_z)), 
+  Variable(torch.ones(1, dim_z))
+)
+
 if use_cuda:
-    mu = mu.cuda()
-    sigma = sigma.cuda()
+  inference_net.cuda()
+  generative_net.cuda()
+  prior_z.mu = prior_z.mu.cuda()
+  prior_z.sigma = prior_z.sigma.cuda()
 
-prior_z = Normal(Variable(mu), Variable(sigma), use_cuda=True)
-
-lr = 1e-5
+lr = 1e-3
 optimizer = torch.optim.Adam([
   {'params': inference_net.parameters(), 'lr': lr},
   # {'params': [inference_net_log_stddev], 'lr': lr},
@@ -209,7 +207,7 @@ optimizer = torch.optim.Adam([
   {'params': [gen.sigma_net.extra_args[0] for gen in generative_net.group_generators], 'lr': lr}
 ])
 
-Ws_lr = 1e-5
+Ws_lr = 1e-6
 optimizer_Ws = torch.optim.SGD([
   {'params': [generative_net.Ws], 'lr': Ws_lr, 'momentum': 0}
 ])
@@ -228,7 +226,6 @@ plot_interval = 5000
 elbo_per_iter = []
 iteration = 0
 for epoch in range(num_epochs):
-
   for Xbatch, _ in dataloader:
     if iteration > 1000:
       stddev_multiple = 1
